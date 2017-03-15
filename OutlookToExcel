@@ -1,0 +1,133 @@
+Option Explicit
+ Sub CopyToExcel()
+ Dim xlApp As Object
+ Dim xlWB As Object
+ Dim xlSheet As Object
+ Dim rCount As Long
+ Dim bXStarted As Boolean
+ Dim enviro As String
+ Dim strPath As String
+
+Dim objOL As Outlook.Application
+Dim objFolder As Outlook.MAPIFolder
+Dim objItems As Outlook.Items
+ Dim obj As Object
+ Dim olItem 'As Outlook.MailItem
+ Dim strColA, strColB, strColC, strColD, strColE, strColF As String
+               
+' Get Excel set up
+enviro = CStr(Environ("USERPROFILE"))
+'the path of the workbook
+strPath = enviro & "\Desktop\Extracted Email Data.xlsx"
+     On Error Resume Next
+     Set xlApp = GetObject(, "Excel.Application")
+     If Err <> 0 Then
+         Application.StatusBar = "Please wait while Excel source is opened ... "
+         Set xlApp = CreateObject("Excel.Application")
+         bXStarted = True
+     End If
+     On Error GoTo 0
+
+On Error Resume Next
+  ' Open the workbook to input the data
+  ' Create workbook if doesn't exist
+     Set xlWB = xlApp.Workbooks.Open(strPath)
+If Err <> 0 Then
+        Set xlWB = xlApp.Workbooks.Add
+      xlWB.SaveAs FileName:=strPath
+End If
+   On Error GoTo 0
+     Set xlSheet = xlWB.Sheets("Sheet1")
+    
+On Error Resume Next
+' add the headers if not present
+If xlSheet.Range("A1") = "" Then
+  xlSheet.Range("A1") = "Sender Name"
+  xlSheet.Range("B1") = "Sender Email"
+  xlSheet.Range("C1") = "Subject"
+  xlSheet.Range("D1") = "Body"
+  xlSheet.Range("E1") = "Sent To"
+  xlSheet.Range("F1") = "Date"
+End If
+
+'Find the next empty line of the worksheet
+rCount = xlSheet.Range("B" & xlSheet.Rows.Count).End(-4162).Row
+'needed for Exchange 2016. Remove if causing blank lines.
+rCount = rCount + 1
+
+' get the values from outlook
+Set objOL = Outlook.Application
+Set objFolder = objOL.ActiveExplorer.CurrentFolder
+    Set objItems = objFolder.Items
+  For Each obj In objItems
+
+    Set olItem = obj
+    
+ 'collect the fields
+ 
+    strColA = olItem.SenderName
+    strColB = olItem.SenderEmailAddress
+    strColC = olItem.Subject
+    strColD = olItem.Body
+    strColE = olItem.To
+    strColF = olItem.ReceivedTime
+    
+
+' Get the Exchange address
+' if not using Exchange, this block can be removed
+ Dim olEU As Outlook.ExchangeUser
+ Dim oEDL As Outlook.ExchangeDistributionList
+ Dim recip As Outlook.Recipient
+ Set recip = Application.Session.CreateRecipient(strColC)
+
+ If InStr(1, strColB, "/") > 0 Then
+' if exchange, get smtp address
+     Select Case recip.AddressEntry.AddressEntryUserType
+       Case OlAddressEntryUserType.olExchangeUserAddressEntry
+         Set olEU = recip.AddressEntry.GetExchangeUser
+         If Not (olEU Is Nothing) Then
+             strColC = olEU.PrimarySmtpAddress
+         End If
+       Case OlAddressEntryUserType.olOutlookContactAddressEntry
+         Set olEU = recip.AddressEntry.GetExchangeUser
+         If Not (olEU Is Nothing) Then
+            strColC = olEU.PrimarySmtpAddress
+         End If
+       Case OlAddressEntryUserType.olExchangeDistributionListAddressEntry
+         Set oEDL = recip.AddressEntry.GetExchangeDistributionList
+         If Not (oEDL Is Nothing) Then
+            strColC = olEU.PrimarySmtpAddress
+         End If
+     End Select
+End If
+' End Exchange section
+
+'write them in the excel sheet
+  xlSheet.Range("A" & rCount) = strColA
+  xlSheet.Range("B" & rCount) = strColB
+  xlSheet.Range("c" & rCount) = strColC
+  xlSheet.Range("d" & rCount) = strColD
+  xlSheet.Range("e" & rCount) = strColE
+  xlSheet.Range("f" & rCount) = strColF
+ 
+'Next row
+  rCount = rCount + 1
+xlWB.Save
+
+ Next
+ 
+' don't wrap lines
+xlSheet.Rows.WrapText = False
+
+xlWB.Save
+     xlWB.Close 1
+     If bXStarted Then
+         xlApp.Quit
+     End If
+    
+     Set olItem = Nothing
+     Set obj = Nothing
+     Set xlApp = Nothing
+     Set xlWB = Nothing
+     Set xlSheet = Nothing
+ End Sub
